@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Libro Mayor · Ingresos y gastos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --paper:#F6F1E4;
+    --paper-line:#E4DBC4;
+    --ink:#1B2A4A;
+    --ink-soft:#5B6685;
+    --ingreso:#2F6B4F;
+    --ingreso-bg:#E4EFE7;
+    --gasto:#AE3B3B;
+    --gasto-bg:#F3E3E1;
+    --gold:#C99A3D;
+    --card:#FFFDF8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    padding:24px 16px 80px;
+  }
+  .wrap{max-width:760px;margin:0 auto;}
+  h1{
+    font-family:'Lora',serif;
+    font-weight:700;
+    font-size:28px;
+    margin:0 0 4px;
+    letter-spacing:-0.01em;
+  }
+  .subtitle{color:var(--ink-soft);font-size:14px;margin:0 0 24px;}
+  .config-warning{
+    background:#FBF3D8;border:1px solid var(--gold);border-radius:8px;
+    padding:12px 16px;font-size:13px;margin-bottom:20px;color:#6b5320;
+    display:none;
+  }
+  .tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid var(--paper-line);}
+  .tab{
+    font-family:'Lora',serif;font-weight:600;font-size:14px;
+    padding:10px 18px;cursor:pointer;color:var(--ink-soft);
+    border-bottom:2px solid transparent;margin-bottom:-2px;
+    user-select:none;
+  }
+  .tab.active{color:var(--ink);border-bottom-color:var(--gold);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .card{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:10px;
+    padding:18px 20px;
+    margin-bottom:16px;
+  }
+  .card h2{font-family:'Lora',serif;font-size:16px;margin:0 0 14px;font-weight:600;}
+  label{display:block;font-size:12px;color:var(--ink-soft);margin:10px 0 4px;font-weight:500;}
+  input,select,textarea{
+    width:100%;padding:9px 10px;border:1px solid var(--paper-line);
+    border-radius:6px;font-family:'Inter',sans-serif;font-size:14px;
+    background:#fff;color:var(--ink);
+  }
+  textarea{resize:vertical;min-height:50px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  button{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;
+    padding:10px 18px;border:none;border-radius:6px;cursor:pointer;
+    background:var(--ink);color:#fff;margin-top:14px;
+  }
+  button:hover{opacity:0.9;}
+  button.secondary{background:transparent;color:var(--ink);border:1px solid var(--paper-line);margin-left:8px;}
+  .toggle-tipo{display:flex;gap:8px;margin-top:10px;}
+  .toggle-tipo button{
+    flex:1;margin:0;background:#fff;color:var(--ink-soft);border:1px solid var(--paper-line);
+  }
+  .toggle-tipo button.selected.ingreso{background:var(--ingreso-bg);color:var(--ingreso);border-color:var(--ingreso);}
+  .toggle-tipo button.selected.gasto{background:var(--gasto-bg);color:var(--gasto);border-color:var(--gasto);}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{
+    text-align:left;font-family:'Lora',serif;font-weight:600;font-size:12px;
+    color:var(--ink-soft);padding:6px 8px;border-bottom:1px solid var(--paper-line);
+  }
+  td{padding:9px 8px;border-bottom:1px solid var(--paper-line);}
+  tr:last-child td{border-bottom:none;}
+  .monto{font-family:'IBM Plex Mono',monospace;font-weight:600;text-align:right;}
+  .monto.ingreso{color:var(--ingreso);}
+  .monto.gasto{color:var(--gasto);}
+  .empty{color:var(--ink-soft);font-size:13px;padding:12px 0;}
+  .pill{
+    display:inline-block;font-size:11px;padding:2px 8px;border-radius:12px;
+    background:var(--paper-line);color:var(--ink-soft);
+  }
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;}
+  .stat-box{background:var(--card);border:1px solid var(--paper-line);border-radius:10px;padding:16px;text-align:center;}
+  .stat-label{font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+  .stat-value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;}
+  .cliente-nuevo{display:none;background:#FBF9F2;border:1px dashed var(--paper-line);border-radius:8px;padding:12px;margin-top:8px;}
+  @media (max-width:520px){
+    .stats-grid{grid-template-columns:1fr;}
+    .row2{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Libro mayor</h1>
+  <p class="subtitle">Ingresos, gastos y clientes de tu emprendimiento</p>
+
+  <div class="config-warning" id="configWarning">
+    Falta configurar la conexión a Supabase. Editá las variables <code>SUPABASE_URL</code> y <code>SUPABASE_ANON_KEY</code> al principio del archivo.
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="movimientos">Movimientos</div>
+    <div class="tab" data-tab="clientes">Clientes</div>
+    <div class="tab" data-tab="stats">Estadísticas</div>
+  </div>
+
+  <!-- MOVIMIENTOS -->
+  <div class="panel active" id="panel-movimientos">
+    <div class="card">
+      <h2>Nuevo movimiento</h2>
+      <div class="toggle-tipo">
+        <button type="button" class="selected ingreso" id="btnIngreso" onclick="setTipo('ingreso')">Ingreso</button>
+        <button type="button" class="gasto" id="btnGasto" onclick="setTipo('gasto')">Gasto</button>
+      </div>
+      <div class="row2">
+        <div>
+          <label>Monto</label>
+          <input type="number" id="movMonto" step="0.01" placeholder="0.00">
+        </div>
+        <div>
+          <label>Fecha</label>
+          <input type="date" id="movFecha">
+        </div>
+      </div>
+      <label>Descripción</label>
+      <input type="text" id="movDescripcion" placeholder="Ej: Venta de torta / Compra de insumos">
+      <label>Categoría</label>
+      <input type="text" id="movCategoria" placeholder="Ej: Ventas, Insumos, Envíos...">
+
+      <div id="clienteWrap">
+        <label>Cliente</label>
+        <select id="movCliente">
+          <option value="">Sin cliente</option>
+          <option value="__nuevo__">+ Agregar cliente nuevo</option>
+        </select>
+        <div class="cliente-nuevo" id="clienteNuevoBox">
+          <label>Nombre del cliente</label>
+          <input type="text" id="nuevoClienteNombre">
+          <label>WhatsApp</label>
+          <input type="text" id="nuevoClienteWsp" placeholder="Ej: +54 9 11 1234 5678">
+        </div>
+      </div>
+
+      <button onclick="guardarMovimiento()">Guardar movimiento</button>
+    </div>
+
+    <div class="card">
+      <h2>Historial</h2>
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Cliente</th><th style="text-align:right;">Monto</th></tr>
+        </thead>
+        <tbody id="tablaMovimientos"></tbody>
+      </table>
+      <div class="empty" id="movEmpty" style="display:none;">Todavía no cargaste movimientos.</div>
+    </div>
+  </div>
+
+  <!-- CLIENTES -->
+  <div class="panel" id="panel-clientes">
+    <div class="card">
+      <h2>Nuevo cliente</h2>
+      <label>Nombre</label>
+      <input type="text" id="cliNombre" placeholder="Nombre del cliente">
+      <label>WhatsApp</label>
+      <input type="text" id="cliWsp" placeholder="Ej: +54 9 11 1234 5678">
+      <label>Notas</label>
+      <textarea id="cliNotas" placeholder="Cualquier dato que te sirva recordar"></textarea>
+      <button onclick="guardarCliente()">Guardar cliente</button>
+    </div>
+
+    <div class="card">
+      <h2>Listado de clientes</h2>
+      <table>
+        <thead><tr><th>Nombre</th><th>WhatsApp</th><th>Notas</th></tr></thead>
+        <tbody id="tablaClientes"></tbody>
+      </table>
+      <div class="empty" id="cliEmpty" style="display:none;">Todavía no cargaste clientes.</div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="panel" id="panel-stats">
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Ingresos totales</div>
+        <div class="stat-value" id="statIngresos" style="color:var(--ingreso);">$0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Gastos totales</div>
+        <div class="stat-value" id="statGastos" style="color:var(--gasto);">$0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Balance</div>
+        <div class="stat-value" id="statBalance">$0</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Clientes que más generaron</h2>
+      <table>
+        <thead><tr><th>Cliente</th><th style="text-align:right;">Total generado</th></tr></thead>
+        <tbody id="tablaRanking"></tbody>
+      </table>
+      <div class="empty" id="rankEmpty" style="display:none;">Todavía no hay ingresos asociados a clientes.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ======= CONFIGURACIÓN: completá esto con tus datos de Supabase =======
+const SUPABASE_URL = "https://hptxxahskqbbhrhjtral.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_9Q_Gdr5e1VOnmTLYfd9tUw_x9bkG24n";
+// ========================================================================
+
+let sb = null;
+if (SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 10) {
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} else {
+  document.getElementById('configWarning').style.display = 'block';
+}
+
+let tipoActual = 'ingreso';
+let clientesCache = [];
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'stats') cargarStats();
+  });
+});
+
+document.getElementById('movFecha').valueAsDate = new Date();
+
+function setTipo(tipo) {
+  tipoActual = tipo;
+  document.getElementById('btnIngreso').classList.toggle('selected', tipo === 'ingreso');
+  document.getElementById('btnGasto').classList.toggle('selected', tipo === 'gasto');
+  document.getElementById('clienteWrap').style.display = tipo === 'ingreso' ? 'block' : 'none';
+}
+
+document.getElementById('movCliente').addEventListener('change', (e) => {
+  document.getElementById('clienteNuevoBox').style.display = e.target.value === '__nuevo__' ? 'block' : 'none';
+});
+
+function money(n) {
+  return '$' + Number(n).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+async function cargarClientes() {
+  if (!sb) return;
+  const { data, error } = await sb.from('clientes').select('*').order('nombre');
+  if (error) { console.error(error); return; }
+  clientesCache = data || [];
+
+  const tbody = document.getElementById('tablaClientes');
+  tbody.innerHTML = '';
+  document.getElementById('cliEmpty').style.display = clientesCache.length ? 'none' : 'block';
+  clientesCache.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${c.nombre}</td><td>${c.whatsapp || '-'}</td><td>${c.notas || '-'}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const select = document.getElementById('movCliente');
+  select.innerHTML = '<option value="">Sin cliente</option>';
+  clientesCache.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nombre;
+    select.appendChild(opt);
+  });
+  const nuevoOpt = document.createElement('option');
+  nuevoOpt.value = '__nuevo__';
+  nuevoOpt.textContent = '+ Agregar cliente nuevo';
+  select.appendChild(nuevoOpt);
+}
+
+async function guardarCliente() {
+  if (!sb) return alert('Falta configurar Supabase.');
+  const nombre = document.getElementById('cliNombre').value.trim();
+  if (!nombre) return alert('Poné al menos el nombre del cliente.');
+  const whatsapp = document.getElementById('cliWsp').value.trim();
+  const notas = document.getElementById('cliNotas').value.trim();
+
+  const { error } = await sb.from('clientes').insert({ nombre, whatsapp, notas });
+  if (error) return alert('Error al guardar: ' + error.message);
+
+  document.getElementById('cliNombre').value = '';
+  document.getElementById('cliWsp').value = '';
+  document.getElementById('cliNotas').value = '';
+  cargarClientes();
+}
+
+async function guardarMovimiento() {
+  if (!sb) return alert('Falta configurar Supabase.');
+  const monto = parseFloat(document.getElementById('movMonto').value);
+  if (!monto || monto <= 0) return alert('Poné un monto válido.');
+  const fecha = document.getElementById('movFecha').value;
+  const descripcion = document.getElementById('movDescripcion').value.trim();
+  const categoria = document.getElementById('movCategoria').value.trim();
+
+  let cliente_id = null;
+  if (tipoActual === 'ingreso') {
+    const seleccion = document.getElementById('movCliente').value;
+    if (seleccion === '__nuevo__') {
+      const nombre = document.getElementById('nuevoClienteNombre').value.trim();
+      if (nombre) {
+        const whatsapp = document.getElementById('nuevoClienteWsp').value.trim();
+        const { data, error } = await sb.from('clientes').insert({ nombre, whatsapp }).select().single();
+        if (error) return alert('Error al crear cliente: ' + error.message);
+        cliente_id = data.id;
+      }
+    } else if (seleccion) {
+      cliente_id = seleccion;
+    }
+  }
+
+  const { error } = await sb.from('movimientos').insert({
+    tipo: tipoActual, monto, descripcion, categoria, fecha, cliente_id
+  });
+  if (error) return alert('Error al guardar: ' + error.message);
+
+  document.getElementById('movMonto').value = '';
+  document.getElementById('movDescripcion').value = '';
+  document.getElementById('movCategoria').value = '';
+  document.getElementById('nuevoClienteNombre').value = '';
+  document.getElementById('nuevoClienteWsp').value = '';
+  document.getElementById('clienteNuevoBox').style.display = 'none';
+  document.getElementById('movCliente').value = '';
+
+  await cargarClientes();
+  cargarMovimientos();
+}
+
+async function cargarMovimientos() {
+  if (!sb) return;
+  const { data, error } = await sb
+    .from('movimientos')
+    .select('*, clientes(nombre)')
+    .order('fecha', { ascending: false })
+    .order('creado_en', { ascending: false });
+  if (error) { console.error(error); return; }
+
+  const tbody = document.getElementById('tablaMovimientos');
+  tbody.innerHTML = '';
+  document.getElementById('movEmpty').style.display = (data && data.length) ? 'none' : 'block';
+  (data || []).forEach(m => {
+    const tr = document.createElement('tr');
+    const signo = m.tipo === 'ingreso' ? '+' : '-';
+    tr.innerHTML = `
+      <td>${new Date(m.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</td>
+      <td>${m.descripcion || '-'}</td>
+      <td>${m.categoria ? `<span class="pill">${m.categoria}</span>` : '-'}</td>
+      <td>${m.clientes ? m.clientes.nombre : '-'}</td>
+      <td class="monto ${m.tipo}">${signo}${money(m.monto)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function cargarStats() {
+  if (!sb) return;
+  const { data, error } = await sb.from('movimientos').select('*, clientes(nombre)');
+  if (error) { console.error(error); return; }
+
+  let ingresos = 0, gastos = 0;
+  const porCliente = {};
+
+  (data || []).forEach(m => {
+    if (m.tipo === 'ingreso') {
+      ingresos += Number(m.monto);
+      if (m.clientes && m.clientes.nombre) {
+        porCliente[m.clientes.nombre] = (porCliente[m.clientes.nombre] || 0) + Number(m.monto);
+      }
+    } else {
+      gastos += Number(m.monto);
+    }
+  });
+
+  document.getElementById('statIngresos').textContent = money(ingresos);
+  document.getElementById('statGastos').textContent = money(gastos);
+  const balance = ingresos - gastos;
+  const balanceEl = document.getElementById('statBalance');
+  balanceEl.textContent = money(balance);
+  balanceEl.style.color = balance >= 0 ? 'var(--ingreso)' : 'var(--gasto)';
+
+  const ranking = Object.entries(porCliente).sort((a, b) => b[1] - a[1]);
+  const tbody = document.getElementById('tablaRanking');
+  tbody.innerHTML = '';
+  document.getElementById('rankEmpty').style.display = ranking.length ? 'none' : 'block';
+  ranking.forEach(([nombre, total]) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${nombre}</td><td class="monto ingreso">${money(total)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+cargarClientes();
+cargarMovimientos();
+</script>
+</body>
+</html>
